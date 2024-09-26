@@ -34,7 +34,7 @@ namespace cs200 {
   private:
     GLint ucolor, utransform;
     GLuint program, vao_edges, vao_faces, vertex_buffer, edge_buffer, face_buffer;
-    size_t mesh_edge_count, mesh_face_count;
+    int mesh_edge_count, mesh_face_count;
   };
 
 } // namespace cs200

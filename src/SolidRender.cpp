@@ -19,7 +19,7 @@ constexpr const char *FRAGMENT_SOURCE = //
 constexpr const char *VERTEX_SOURCE = //
     "#version 130\n"
     "in vec4 position;"
-    "uniform mat3 transform;"
+    "uniform mat4 transform;"
     "void main(void) {"
     " gl_Position = transform * position;"
     "}";
@@ -101,16 +101,93 @@ namespace cs200 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
-  void SolidRender::setTransform(const glm::mat4 &M) {
-    //
+  void SolidRender::setTransform(const glm::mat4 &M) { // NOLINT
+    glUseProgram(program);
     glUniformMatrix4fv(utransform, 1, false, &M[0][0]);
   }
 
-  void SolidRender::loadMesh(const Mesh &m) {}
+  void SolidRender::loadMesh(const Mesh &m) {
+    // Generate vertex buffer & bind
+    glGenBuffers(1, &vertex_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        static_cast<std::intptr_t>(m.vertexCount() * sizeof(glm::vec4)),
+        m.vertexArray(),
+        GL_STATIC_DRAW);
 
-  void SolidRender::unloadMesh() {}
+    // Setup Edge VAO, EBO
+    glGenVertexArrays(1, &vao_edges);
+    glBindVertexArray(vao_edges);
 
-  void SolidRender::displayEdges(const glm::vec4 &c) {}
+    glUseProgram(program);
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
 
-  void SolidRender::displayFaces(const glm::vec4 &c) {}
+    glGenBuffers(1, &edge_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edge_buffer);
+    glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        static_cast<std::intptr_t>(m.edgeCount() * sizeof(Mesh::Edge)),
+        m.edgeArray(),
+        GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 4, GL_FLOAT, false, sizeof(glm::vec4), nullptr);
+    glEnableVertexAttribArray(0);
+
+    // FACES VAO
+    glGenVertexArrays(1, &vao_faces);
+    glBindVertexArray(vao_faces);
+
+    glUseProgram(program);
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+
+    glGenBuffers(1, &face_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, face_buffer);
+    glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        static_cast<std::intptr_t>(m.faceCount() * sizeof(Mesh::Face)),
+        m.faceArray(),
+        GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 4, GL_FLOAT, false, sizeof(glm::vec4), nullptr);
+    glEnableVertexAttribArray(0);
+
+
+    // Cleanup 
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
+  }
+
+  void SolidRender::unloadMesh() {
+    glDeleteBuffers(1, &vertex_buffer);
+    glDeleteBuffers(1, &edge_buffer);
+    glDeleteBuffers(1, &face_buffer);
+    glDeleteVertexArrays(1, &vao_edges);
+    glDeleteVertexArrays(1, &vao_faces);
+  }
+
+  void SolidRender::displayEdges(const glm::vec4 &c) {
+    glUseProgram(program);
+
+    glUniform4f(ucolor, c.r, c.g, c.b, c.a);
+
+    glBindVertexArray(vao_edges);
+    glDrawElements(GL_LINES, mesh_edge_count * 2, GL_UNSIGNED_INT, nullptr);
+
+    glBindVertexArray(0);
+    glUseProgram(0);
+  }
+
+  void SolidRender::displayFaces(const glm::vec4 &c) {
+    glUseProgram(program);
+    glUniform4f(ucolor, c.r, c.g, c.b, c.a);
+
+    glBindVertexArray(vao_faces);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+    glBindVertexArray(0);
+    glUseProgram(0);
+  }
 } // namespace cs200
