@@ -1,3 +1,15 @@
+/**
+ * Name: Kishan S Patel
+ * Email: kishan.patel@digipen.edu
+ * Assignment Number: 3
+ * Course: CS200
+ * Term: Fall 2024
+ *
+ * File: SolidRender.cpp
+ *
+ * OpenGL Mesh Wrapper that also takes care of the shader program ot use & draw
+ */
+
 #include "SolidRender.h"
 #include <array>
 #include <iostream>
