@@ -1,76 +1,146 @@
 #include "SolidRender.h"
 #include <array>
-#include <stdexcept>
+#include <iostream>
 
 /**
  * @brief Fragment Shader Source
  */
-constexpr const char *FRAGMENT_SOURCE = //
-    "#version 130\n"
-    "uniform vec4 color;"
-    "out vec4 frag_color;"
-    "void main(void) {"
-    " frag_color = color;"
-    "}";
+constexpr const char *FRAGMENT_SOURCE = R"(
+  #version 130
+
+  uniform vec4 color;
+  out vec4 frag_color;
+  void main(void) {
+    frag_color = color;
+  }
+)";
 
 /**
  * @brief Vertex Shader Source
  */
-constexpr const char *VERTEX_SOURCE = //
-    "#version 130\n"
-    "in vec4 position;"
-    "uniform mat4 transform;"
-    "void main(void) {"
-    " gl_Position = transform * position;"
-    "}";
+constexpr const char *VERTEX_SOURCE = R"(
+  #version 130
+
+  in vec4 position;
+
+  uniform mat4 transform;
+  void main() {
+    gl_Position = transform * position;
+  }
+)";
 
 namespace cs200 {
 
+  /**
+   * @brief Compiles a shader of type 'shader_type' from source
+   *
+   * @param source Source code in text for the shader
+   * @param shader_type OpenGL enum for what shader to use (GL_VERTEX_SHADER or GL_FRAGMENT_SHADER typically)
+   */
   static GLuint compile_shader(const char *const source, GLenum shader_type) {
-    const GLuint id = glCreateShader(shader_type);
+    const GLuint shader_id = glCreateShader(shader_type);
 
-    if (id == 0) throw std::runtime_error{"Failure to create shader (possible incorrect shader_type)"};
+    if (shader_id == 0) throw std::runtime_error{"Failure to create shader (possible incorrect shader_type)"};
 
-    glShaderSource(id, 1, &source, nullptr);
+    // upload shader source to the GPU
+    glShaderSource(shader_id, 1, &source, nullptr);
 
-    glCompileShader(id);
+    // compile
+    glCompileShader(shader_id);
 
+    // check for success
     int32_t success{0};
-    glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(shader_id, GL_COMPILE_STATUS, &success);
 
     if (not success) {
+      // if no sucess get the info log and panic
       std::array<char, 512> info_log{'\0'};
-      glGetShaderInfoLog(id, info_log.size(), nullptr, info_log.data());
+      glGetShaderInfoLog(shader_id, info_log.size(), nullptr, info_log.data());
       throw std::runtime_error{std::string{"Failed to compile Shader: "} + info_log.data()};
     }
 
-    return id;
+    return shader_id;
   }
 
+  /**
+   * @brief Links two shaders together
+   */
   static GLuint link_program(const GLuint vertex_shader, const GLuint fragment_shader) {
-    const GLuint id = glCreateProgram();
+    const GLuint program_id = glCreateProgram();
 
-    if (id == 0) throw std::runtime_error{"Failed to create program"};
+    if (program_id == 0) throw std::runtime_error{"Failed to create program"};
 
-    glAttachShader(id, vertex_shader);
-    glAttachShader(id, fragment_shader);
+    // attach shaders to the program
+    glAttachShader(program_id, vertex_shader);
+    glAttachShader(program_id, fragment_shader);
 
-    glLinkProgram(id);
-
-    int32_t success{0};
-    glGetProgramiv(id, GL_LINK_STATUS, &success);
+    glLinkProgram(program_id);
 
     // clean up shaders
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
+    // check for success
+    int32_t success{0};
+    glGetProgramiv(program_id, GL_LINK_STATUS, &success);
+
     if (not success) {
+      // get info log & panic if failure
       std::array<char, 512> info_log{'\0'};
-      glGetProgramInfoLog(id, info_log.size(), nullptr, info_log.data());
+      glGetProgramInfoLog(program_id, info_log.size(), nullptr, info_log.data());
       throw std::runtime_error{std::string{"Failed to compile link program: "} + info_log.data()};
     }
 
-    return id;
+    return program_id;
+  }
+
+  template<typename T>
+  static void create_vao_and_ebo(
+      GLuint &vao,
+      GLuint &ebo,
+      const GLuint vertex_buffer,
+      const GLuint attribute_position,
+      const T *const index_data,
+      const std::size_t indices_length) {
+
+    // create the element buffer object for the indecies
+    {
+      // bind as the active EBO
+      glGenBuffers(1, &ebo);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+
+      // upload the data
+      glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_length * sizeof(T), index_data, GL_STATIC_DRAW);
+
+      // cleanup
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+
+    {
+      // create the vertex buffer object
+      glGenVertexArrays(1, &vao);
+
+      // bind it as current
+      glBindVertexArray(vao);
+    }
+
+    // bind the vertex buffer to the VAO for the actual array data
+    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+
+    // bind the element indecies array
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+
+    // setup the Vertex Attribute,
+    {
+      // one vertex is just composed of a vec4, so its just 4 floats with no offset at the beginning
+      glVertexAttribPointer(attribute_position, 4, GL_FLOAT, false, sizeof(glm::vec4), nullptr);
+      glEnableVertexAttribArray(attribute_position);
+    }
+
+    // cleanup
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   }
 
   SolidRender::SolidRender() :
@@ -90,8 +160,10 @@ namespace cs200 {
         compile_shader(FRAGMENT_SOURCE, GL_FRAGMENT_SHADER) //
     );
 
+    glUseProgram(program);
     ucolor = glGetUniformLocation(program, "color");
     utransform = glGetUniformLocation(program, "transform");
+    glUseProgram(0);
   }
 
   SolidRender::~SolidRender() { glDeleteProgram(program); }
@@ -106,88 +178,75 @@ namespace cs200 {
     glUniformMatrix4fv(utransform, 1, false, &M[0][0]);
   }
 
-  void SolidRender::loadMesh(const Mesh &m) {
-    // Generate vertex buffer & bind
+  void SolidRender::loadMesh(const Mesh &mesh) {
+
+    // Create the VBO for the raw vertex data
     glGenBuffers(1, &vertex_buffer);
+
+    // bind the VBO as current
     glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+
+    // upload the vertex data to the GPU
     glBufferData(
         GL_ARRAY_BUFFER,
-        static_cast<std::intptr_t>(m.vertexCount() * sizeof(glm::vec4)),
-        m.vertexArray(),
+        static_cast<GLintptr>(mesh.vertexCount() * sizeof(glm::vec4)),
+        mesh.vertexArray(),
         GL_STATIC_DRAW);
 
-    // Setup Edge VAO, EBO
-    glGenVertexArrays(1, &vao_edges);
-    glBindVertexArray(vao_edges);
-
-    glUseProgram(program);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-
-    glGenBuffers(1, &edge_buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edge_buffer);
-    glBufferData(
-        GL_ELEMENT_ARRAY_BUFFER,
-        static_cast<std::intptr_t>(m.edgeCount() * sizeof(Mesh::Edge)),
-        m.edgeArray(),
-        GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 4, GL_FLOAT, false, sizeof(glm::vec4), nullptr);
-    glEnableVertexAttribArray(0);
-
-    // FACES VAO
-    glGenVertexArrays(1, &vao_faces);
-    glBindVertexArray(vao_faces);
-
-    glUseProgram(program);
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-
-    glGenBuffers(1, &face_buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, face_buffer);
-    glBufferData(
-        GL_ELEMENT_ARRAY_BUFFER,
-        static_cast<std::intptr_t>(m.faceCount() * sizeof(Mesh::Face)),
-        m.faceArray(),
-        GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 4, GL_FLOAT, false, sizeof(glm::vec4), nullptr);
-    glEnableVertexAttribArray(0);
-
-
-    // Cleanup 
+    // cleanup
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+
+    glUseProgram(program);
+    const GLuint attribute_position = glGetAttribLocation(program, "position");
+
+    // create the faces VAO
+    mesh_face_count = mesh.faceCount();
+    create_vao_and_ebo<Mesh::Face>(
+        vao_faces, face_buffer, vertex_buffer, attribute_position, mesh.faceArray(), mesh_face_count);
+
+    // create the edges VAO
+    mesh_edge_count = mesh.edgeCount();
+    create_vao_and_ebo<Mesh::Edge>(
+        vao_edges, edge_buffer, vertex_buffer, attribute_position, mesh.edgeArray(), mesh_edge_count);
+
     glUseProgram(0);
   }
 
   void SolidRender::unloadMesh() {
+    glDeleteVertexArrays(1, &vao_edges);
+    glDeleteVertexArrays(1, &vao_faces);
     glDeleteBuffers(1, &vertex_buffer);
     glDeleteBuffers(1, &edge_buffer);
     glDeleteBuffers(1, &face_buffer);
-    glDeleteVertexArrays(1, &vao_edges);
-    glDeleteVertexArrays(1, &vao_faces);
   }
 
-  void SolidRender::displayEdges(const glm::vec4 &c) {
-    glUseProgram(program);
+  void SolidRender::displayEdges(const glm::vec4 &c) /* const */ {
+    // bind VAO for edges & do the draw call
 
+    // set active program
+    glUseProgram(program);
+    // upload color uniform
     glUniform4f(ucolor, c.r, c.g, c.b, c.a);
 
     glBindVertexArray(vao_edges);
     glDrawElements(GL_LINES, mesh_edge_count * 2, GL_UNSIGNED_INT, nullptr);
-
     glBindVertexArray(0);
+
     glUseProgram(0);
   }
 
-  void SolidRender::displayFaces(const glm::vec4 &c) {
+  void SolidRender::displayFaces(const glm::vec4 &c) /* const */ {
+    // bind VAO for faces & do the draw call
+
     glUseProgram(program);
     glUniform4f(ucolor, c.r, c.g, c.b, c.a);
 
     glBindVertexArray(vao_faces);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+    glDrawElements(GL_TRIANGLES, mesh_face_count * 3, GL_UNSIGNED_INT, nullptr);
 
     glBindVertexArray(0);
+
     glUseProgram(0);
   }
 } // namespace cs200

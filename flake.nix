@@ -39,9 +39,9 @@
             glew 
             glm 
             libGL
-            # wayland-protocols
-            # wayland
-            # libxkbcommon
+            wayland-protocols
+            wayland
+            libxkbcommon
           ];
         };
     });

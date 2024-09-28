@@ -19,6 +19,12 @@ add_compile_options(-Wextra -Wall -Wpedantic -std=c++11)
 
 add_executable(test src/SolidRenderTest.cpp src/Affine.cpp src/SquareMesh.cpp src/SolidRender.cpp)
 target_link_libraries(test PRIVATE OpenGL glm::glm SDL2::SDL2 ${GLEW_LIBRARIES})
-include_directories(test ${GLEW_INCLUDE_DIRS} ${})
+
+add_executable(demo src/MeshRenderDemo.cpp src/Affine.cpp src/SquareMesh.cpp src/SolidRender.cpp src/MyMesh.cpp)
+
+target_link_libraries(demo PRIVATE OpenGL glm::glm SDL2::SDL2 ${GLEW_LIBRARIES})
+
+include_directories(test ${GLEW_INCLUDE_DIRS})
+include_directories(demo ${GLEW_INCLUDE_DIRS})
 
 # vim:shiftwidth=2:

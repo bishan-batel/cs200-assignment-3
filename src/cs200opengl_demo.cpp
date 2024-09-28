@@ -172,8 +172,8 @@ void Client::draw(double dt) {
   glUseProgram(program);
 
   // set vertex transformation
-  float c = cos(ROTATION_RATE*time),
-        s = sin(ROTATION_RATE*time);
+  float c = glm::cos(ROTATION_RATE*time),
+        s = glm::sin(ROTATION_RATE*time);
   glm::mat4 R(0.5f*c,  0.5f*s, 0, 0,
               -0.5f*s, 0.5f*c, 0, 0,
               0,       0,      0, 0,
